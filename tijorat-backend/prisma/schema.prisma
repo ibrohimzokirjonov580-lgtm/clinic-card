@@ -1,0 +1,356 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// 1. ASOSIY OB'EKTLAR VA FOYDALANUVCHILAR (Core & Users)
+// -----------------------------------------------------------------------------
+
+enum BusinessType {
+  RETAIL
+  CAFE
+  SERVICE
+  ONLINE
+}
+
+model Business {
+  id           String       @id @default(uuid())
+  name         String
+  address      String?
+  phone        String?
+  inn          String? // STIR
+  certificate  String? // YATT/MChJ guvohnoma
+  businessType BusinessType
+  subdomain    String?      @unique // masalan: nomi.tijorat.uz
+
+  // Brendlash
+  logoUrl    String?
+  brandColor String?
+  fontStyle  String?
+
+  // Sozlamalar
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Bog'lanishlar
+  users         User[]
+  products      Product[]
+  orders        Order[]
+  customers     Customer[]
+  inventory     Inventory[]
+  cashShifts    CashShift[]
+  suppliers     Supplier[]
+  promotions    Promotion[]
+  subscriptions Subscription[]
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  CASHIER
+  WAITER
+  ACCOUNTANT
+}
+
+model User {
+  id           String  @id @default(uuid())
+  phone        String  @unique
+  passwordHash String
+  fullName     String?
+  telegramId   String?
+  role         Role    @default(OWNER)
+
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Bog'lanishlar (Xodim sifatida)
+  ordersHandled Order[]     @relation("EmployeeOrders")
+  cashShifts    CashShift[]
+}
+
+// -----------------------------------------------------------------------------
+// 2. MAHSULOTLAR, XIZMATLAR VA OMBOR (Products, Services & Inventory)
+// -----------------------------------------------------------------------------
+
+enum ProductType {
+  GOODS
+  SERVICE
+  DISH
+}
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String
+  products Product[]
+}
+
+model Product {
+  id         String    @id @default(uuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  name        String
+  description String?
+  price       Decimal     @db.Decimal(12, 2)
+  costPrice   Decimal?    @db.Decimal(12, 2) // Tannarx
+  sku         String? // Shtrix-kod yoki artikul
+  imageUrl    String?
+  type        ProductType @default(GOODS)
+  isActive    Boolean     @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Bog'lanishlar
+  inventory         Inventory[]
+  orderItems        OrderItem[]
+  recipeItems       Recipe[]    @relation("DishRecipe")
+  recipeIngredients Recipe[]    @relation("IngredientRecipe")
+}
+
+model Inventory {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+
+  quantity    Decimal  @db.Decimal(10, 3) // Qoldiq
+  minQuantity Decimal? @db.Decimal(10, 3) // Minimal chegara
+
+  updatedAt DateTime @updatedAt
+}
+
+// Retseptlar / Texnik xarita (Kafe uchun)
+model Recipe {
+  id     String  @id @default(uuid())
+  dishId String // Tayyor taom
+  dish   Product @relation("DishRecipe", fields: [dishId], references: [id])
+
+  ingredientId String // Xomashyo/Ingredient
+  ingredient   Product @relation("IngredientRecipe", fields: [ingredientId], references: [id])
+  quantity     Decimal @db.Decimal(10, 3) // Masalan, 0.2 kg
+  unit         String // kg, litr, dona
+}
+
+// -----------------------------------------------------------------------------
+// 3. MIJOZLAR, CRM VA MARKETING (Customers, Loyalty, Promotions)
+// -----------------------------------------------------------------------------
+
+model Customer {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  fullName      String
+  phone         String  @unique
+  totalSpent    Decimal @default(0) @db.Decimal(12, 2)
+  loyaltyPoints Int     @default(0)
+  tags          String? // vergul bilan ajratilgan, masalan: "VIP, Ulgurji"
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Bog'lanishlar
+  orders Order[]
+  debts  CustomerDebt[]
+}
+
+model CustomerDebt {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  amount  Decimal    @db.Decimal(12, 2)
+  dueDate DateTime?
+  status  DebtStatus @default(UNPAID)
+
+  createdAt DateTime @default(now())
+}
+
+enum DebtStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+model Promotion {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  name            String
+  code            String?  @unique // Promokod
+  discountPercent Decimal? @db.Decimal(5, 2)
+  discountAmount  Decimal? @db.Decimal(12, 2)
+  conditions      Json? // Shartlar (masalan, min summa)
+
+  validFrom  DateTime
+  validUntil DateTime
+  isActive   Boolean  @default(true)
+}
+
+// -----------------------------------------------------------------------------
+// 4. BUYURTMALAR VA SAVDO (Orders & Sales)
+// -----------------------------------------------------------------------------
+
+enum OrderSource {
+  WEBSITE
+  TELEGRAM
+  STORE
+  TABLE
+}
+
+enum OrderStatus {
+  NEW
+  IN_PROGRESS
+  READY
+  DELIVERING
+  COMPLETED
+  CANCELLED
+}
+
+model Order {
+  id         String    @id @default(uuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  employeeId String?
+  employee   User?     @relation("EmployeeOrders", fields: [employeeId], references: [id])
+
+  source         OrderSource @default(STORE)
+  status         OrderStatus @default(NEW)
+  totalAmount    Decimal     @db.Decimal(12, 2)
+  discountAmount Decimal     @default(0) @db.Decimal(12, 2)
+
+  paymentMethod String? // CASH, CARD, CLICK, PAYME
+  paymentStatus String  @default("PENDING") // PENDING, PAID, REFUNDED
+
+  cancelReason String?
+  tableNumber  String? // Kafe moduli uchun
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items   OrderItem[]
+  invoice InvoiceEHF?
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity Decimal @db.Decimal(10, 3)
+  price    Decimal @db.Decimal(12, 2) // Sotilgan vaqtdagi narx
+}
+
+// -----------------------------------------------------------------------------
+// 5. YETKAZIB BERUVCHILAR VA XARIDLAR (Suppliers & Purchases)
+// -----------------------------------------------------------------------------
+
+model Supplier {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  name          String
+  phone         String?
+  contactPerson String?
+
+  createdAt DateTime @default(now())
+
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id         String   @id @default(uuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  totalAmount Decimal        @db.Decimal(12, 2)
+  status      PurchaseStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+}
+
+enum PurchaseStatus {
+  PENDING
+  RECEIVED
+  CANCELLED
+}
+
+// -----------------------------------------------------------------------------
+// 6. MOLIYA, BUXGALTERIYA VA SOLIQ (Finance & Accounting)
+// -----------------------------------------------------------------------------
+
+model InvoiceEHF {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  ehfNumber String  @unique
+  amount    Decimal @db.Decimal(12, 2)
+  status    String  @default("DRAFT") // DRAFT, SENT, ACCEPTED, REJECTED
+
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model AccountingEntry {
+  id          String  @id @default(uuid())
+  businessId  String
+  type        String // INCOME, EXPENSE
+  category    String // RENT, SALARY, PURCHASE
+  amount      Decimal @db.Decimal(12, 2)
+  description String?
+
+  date DateTime @default(now())
+}
+
+model CashShift {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+  cashierId  String
+  cashier    User     @relation(fields: [cashierId], references: [id])
+
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+
+  openingBalance  Decimal  @db.Decimal(12, 2)
+  closingBalance  Decimal? @db.Decimal(12, 2)
+  expectedBalance Decimal? @db.Decimal(12, 2) // Tizim bo'yicha kutilgan summa
+}
+
+// -----------------------------------------------------------------------------
+// 7. OBUNA VA TARIFLAR (Subscriptions)
+// -----------------------------------------------------------------------------
+
+model Subscription {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  plan  String // BASIC, STANDARD, BUSINESS
+  price Decimal @db.Decimal(10, 2)
+
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(true)
+}
