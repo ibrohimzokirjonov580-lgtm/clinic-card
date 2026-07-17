@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Home, ShoppingCart, Users, Package, Settings, Bell, Search, Menu } from 'lucide-react';
+import { Home, ShoppingCart, Users, Package, Settings, Bell, Search, Menu, UtensilsCrossed, MonitorPlay, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -41,6 +41,21 @@ export default function DashboardLayout({
           <NavItem href="/dashboard/orders" icon={<ShoppingCart />} label="Buyurtmalar" active={pathname === '/dashboard/orders'} sidebarOpen={sidebarOpen} />
           <NavItem href="/dashboard/products" icon={<Package />} label="Mahsulotlar" active={pathname === '/dashboard/products'} sidebarOpen={sidebarOpen} />
           <NavItem href="/dashboard/customers" icon={<Users />} label="Mijozlar" active={pathname === '/dashboard/customers'} sidebarOpen={sidebarOpen} />
+
+          {sidebarOpen && (
+            <div className="pt-4 pb-2 px-3">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Kafe / Restoran</p>
+            </div>
+          )}
+          <NavItem href="/dashboard/cafe/tables" icon={<UtensilsCrossed />} label="Stollar xaritasi" active={pathname === '/dashboard/cafe/tables'} sidebarOpen={sidebarOpen} />
+          <NavItem href="/dashboard/cafe/kds" icon={<MonitorPlay />} label="Oshxona Ekrani" active={pathname === '/dashboard/cafe/kds'} sidebarOpen={sidebarOpen} />
+          <NavItem href="/dashboard/cafe/recipes" icon={<FileText />} label="Texnik Xarita" active={pathname === '/dashboard/cafe/recipes'} sidebarOpen={sidebarOpen} />
+
+          {sidebarOpen && (
+            <div className="pt-4 pb-2 px-3">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tizim</p>
+            </div>
+          )}
           <NavItem href="/dashboard/settings" icon={<Settings />} label="Sozlamalar" active={pathname === '/dashboard/settings'} sidebarOpen={sidebarOpen} />
         </nav>
       </motion.aside>
